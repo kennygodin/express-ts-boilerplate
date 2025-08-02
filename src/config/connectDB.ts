@@ -6,7 +6,7 @@ const connectDB = async () => {
   try {
     logger.info("Connecting...");
     await mongoose.connect(env.MONGODB_URI, {
-      dbName: "JustInTime",
+      dbName: "smartgate-ai",
     });
     logger.info("DB Connected!");
   } catch (error) {

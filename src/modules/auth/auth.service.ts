@@ -1,6 +1,5 @@
-import User from "../user/user.model.js";
-import OTP from "../otp/otp.model.js";
 import type {
+  forgotPasswordDTO,
   LoginDTO,
   OTPData,
   RegisterDTO,
@@ -9,109 +8,173 @@ import type {
 import UserService from "../user/user.service.js";
 import { comparePassword, hashPassword } from "../../utils/validationUtils.js";
 import { ApiError, ApiSuccess } from "../../utils/responseHandler.js";
-import { generateToken } from "../../config/token.js";
-import logger from "../../utils/logger.js";
 import { mailService } from "../../services/mail.service.js";
-import type { ObjectId } from "mongoose";
+import { prisma } from "../../lib/prisma.js";
+import {
+  generateOTPToken,
+  generatePasswordResetToken,
+  getOtpTokenByToken,
+  getPasswordResetTokenByToken,
+} from "../../lib/tokens.js";
+import { env } from "bun";
 
 export class AuthService {
   static async register(userData: RegisterDTO) {
     const { password, email } = userData;
 
-    await UserService.checkIfUserExists(email);
-
-    console.log({ userData });
+    await UserService.userExists(email);
 
     const hashedPassword = await hashPassword(password);
 
-    console.log({ hashedPassword });
+    const user = await prisma.user.create({
+      data: {
+        ...userData,
+        password: hashedPassword,
+      },
+    });
 
-    const user = new User({ email, password: hashedPassword });
+    const otpToken = await generateOTPToken(email);
 
-    const emailInfo = await mailService.sendOTPViaEmail(
+    await mailService.sendOTPViaEmail(
       user.email,
-      "-"
-      // user.firstName
+      user.firstName,
+      otpToken.token
     );
 
-    await user.save();
-
-    user.password = undefined;
-
-    console.log({ emailInfo });
-    return ApiSuccess.created(
-      `Registration Successful, OTP has been sent to ${emailInfo.envelope.to}`,
-      { user }
-    );
+    return ApiSuccess.created("Confirmation email sent.");
   }
 
   static async login(userData: LoginDTO) {
     const { email, password } = userData;
     const user = await UserService.findUserByEmail(email);
-    await comparePassword(password, user.password as string);
+    await comparePassword(password, user.password!);
 
-    if (!user.isVerified) {
+    if (!user.emailVerified) {
+      // TODOD: Send email again
       throw ApiError.forbidden("Email Not Verified");
     }
-    const token = generateToken({ userId: user._id });
+
+    // const token = generateToken({ userId: user._id });
 
     return ApiSuccess.ok("Login Successful", {
-      user: { email: user.email, id: user._id },
-      token,
+      user: { email: user.email, id: user.id },
+      // token,
     });
   }
 
-  static async getUser(userId: ObjectId) {
-    const user = await UserService.findUserById(userId);
-    user.password = undefined;
-    return ApiSuccess.ok("User Retrieved Successfully", {
-      user,
-    });
-  }
+  // static async getUser(userId: ObjectId) {
+  //   const user = await UserService.findUserById(userId);
+  //   user.password = undefined;
+  //   return ApiSuccess.ok("User Retrieved Successfully", {
+  //     user,
+  //   });
+  // }
 
   static async sendOTP({ email }: { email: string }) {
     const user = await UserService.findUserByEmail(email);
-    if (user.isVerified) {
-      return ApiSuccess.ok("User Already Verified");
+    if (user.emailVerified) {
+      return ApiSuccess.ok("User already verified");
     }
 
-    const emailInfo = await mailService.sendOTPViaEmail(
+    const otpToken = await generateOTPToken(email);
+
+    await mailService.sendOTPViaEmail(
       user.email,
-      ""
-      //   user.firstName
+      user.firstName,
+      otpToken.token
     );
 
-    return ApiSuccess.ok(`OTP has been sent to ${emailInfo.envelope.to}`);
+    return ApiSuccess.created("Confirmation email sent.");
   }
 
-  static async verifyOTP({ email, otp }: OTPData) {
-    const user = await UserService.findUserByEmail(email);
-    if (user.isVerified) {
-      return ApiSuccess.ok("User Already Verified");
+  static async verifyOTP({ otp }: OTPData) {
+    const existingToken = await getOtpTokenByToken(otp);
+
+    if (!existingToken) {
+      throw ApiError.notFound("OTP token does not exist");
     }
-    const otpExists = await OTP.findOne({ email, otp });
-    if (!otpExists) {
-      throw ApiError.badRequest("Invalid or Expired OTP");
+
+    const hasExpired = new Date(existingToken.expires) < new Date();
+
+    if (hasExpired) {
+      throw ApiError.notFound("OTP token has expired");
     }
-    user.isVerified = true;
-    await user.save();
+
+    const user = await UserService.findUserByEmail(existingToken.email);
+
+    if (!user) {
+      throw ApiError.notFound("Email does not exist");
+    }
+
+    await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        emailVerified: new Date(),
+        email: existingToken.email,
+      },
+    });
+
+    await prisma.oTPToken.delete({
+      where: { id: existingToken.id },
+    });
+
     return ApiSuccess.ok("Email Verified");
   }
 
-  static async forgotPassword({ email }: { email: string }) {
-    const userProfile = await UserService.findUserByEmail(email);
-    const emailInfo = await mailService.sendOTPViaEmail(userProfile.email, "");
-    return ApiSuccess.ok(`OTP has been sent to ${emailInfo.envelope.to}`);
+  static async forgotPassword({ email }: forgotPasswordDTO) {
+    const existingUser = await UserService.findUserByEmail(email);
+
+    if (!existingUser) {
+      throw ApiError.notFound("No user with this email");
+    }
+    const passwordResetToken = await generatePasswordResetToken(email);
+
+    await mailService.sendPasswordResetEmail(
+      existingUser.email,
+      existingUser.firstName,
+      `${env.FRONTEND_APP_URL}/auth/new-password?token=${passwordResetToken.token}`
+    );
+
+    return ApiSuccess.ok("Reset email sent.");
   }
 
-  static async resetPassword({ email, otp, password }: ResetPasswordDTO) {
-    const user = await UserService.findUserByEmail(email);
-    const otpExists = await OTP.findOne({ email, otp });
-    if (!otpExists) {
-      throw ApiError.badRequest("Invalid or Expired OTP");
+  static async resetPassword({ password, token }: ResetPasswordDTO) {
+    const existingToken = await getPasswordResetTokenByToken(token);
+
+    if (!existingToken) {
+      throw ApiError.notFound("Invalid token");
     }
-    user.password = await hashPassword(password);
-    await user.save();
+
+    const hasExpired = new Date(existingToken.expires) < new Date();
+
+    if (hasExpired) {
+      throw ApiError.notFound("Token has expired");
+    }
+
+    const existingUser = await UserService.findUserByEmail(existingToken.email);
+
+    if (hasExpired) {
+      throw ApiError.notFound("Email does not exist");
+    }
+
+    const hashedPassword = await hashPassword(password);
+
+    await prisma.user.update({
+      where: {
+        id: existingUser.id,
+      },
+      data: {
+        password: hashedPassword,
+      },
+    });
+
+    await prisma.passwordResetToken.delete({
+      where: {
+        id: existingToken.id,
+      },
+    });
     return ApiSuccess.ok("Password Updated");
   }
 }

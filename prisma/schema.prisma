@@ -1,0 +1,182 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  email          String         @unique
+  firstName      String
+  lastName       String
+  avatar         String?
+  phone          String?
+  password       String?
+  
+  googleId       String?        @unique
+   emailVerified    DateTime?
+  lastLoginAt    DateTime?
+  
+  role           Role           @default(JOB_SEEKER)
+  
+  employerProfile EmployerProfile?
+  jobSeekerProfile JobSeekerProfile?
+  oauthProviders OAuthProvider[]
+  
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model EmployerProfile {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String         @unique @db.ObjectId
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  companyName      String
+  companySize      CompanySize
+  industry         String
+  companyDescription String?
+  website          String?
+  companyLogo      String?
+  
+  country          String
+  city             String
+  address          String?
+  
+  subscriptionPlan SubscriptionPlan @default(FREE)
+  jobPostsLimit    Int           @default(3)
+  jobPostsUsed     Int           @default(0)
+  
+  autoMatchEnabled Boolean      @default(true)
+  emailNotifications Boolean    @default(true)
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model JobSeekerProfile {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String        @unique @db.ObjectId
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  title            String
+  bio              String?
+  experience       Experience
+  
+  skills           String[]
+  industries       String[]
+  jobTypes         JobType[]
+  workLocation     WorkLocation[]
+  
+  country          String
+  city             String
+  expectedSalaryMin Int?
+  expectedSalaryMax Int?
+  currency         String      @default("USD")
+  
+  resumeUrl        String?
+  portfolioUrl     String?
+  linkedinUrl      String?
+  githubUrl        String?
+  
+  // AI Matching Preferences
+  openToRelocate   Boolean     @default(false)
+  availableFrom    DateTime?
+  
+  profileVisibility ProfileVisibility @default(EMPLOYERS_ONLY)
+  jobAlerts        Boolean     @default(true)
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+}
+
+model OAuthProvider {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String        @unique @db.ObjectId
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider         AuthProvider
+  providerId       String
+  email            String
+  accessToken      String?
+  refreshToken     String?
+  
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([provider, providerId])
+}
+
+model OTPToken {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  email           String
+  token           String  @unique
+  expires         DateTime
+
+  @@unique([email, token])
+}
+
+
+model PasswordResetToken {
+   id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  email           String
+  token           String  @unique
+  expires         DateTime
+
+  @@unique([email, token])
+}
+
+enum Role {
+  EMPLOYER
+  JOB_SEEKER
+}
+
+enum CompanySize {
+  STARTUP
+  SMALL
+  MEDIUM
+  LARGE
+  ENTERPRISE
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum Experience {
+  ENTRY
+  MID
+  SENIOR
+  LEAD
+  EXECUTIVE
+}
+
+enum JobType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  FREELANCE
+}
+
+enum WorkLocation {
+  REMOTE
+  HYBRID
+  ONSITE
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  PRIVATE
+  EMPLOYERS_ONLY
+}
+
+enum AuthProvider {
+  GOOGLE
+  LINKEDIN
+  GITHUB
+}

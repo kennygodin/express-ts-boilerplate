@@ -2,7 +2,7 @@ import express from "express";
 import methodNotAllowed from "../../middleware/methodNotAllowed.js";
 import { AuthController } from "./auth.controller.js";
 import { isAuth } from "../../middleware/auth.js";
-import { userSchema } from "../user/user.schema.js";
+import { AuthSchema } from "../user/user.schema.js";
 import { AuthSchemas } from "./auth.schema.js";
 import { validateBody } from "../../middleware/validateSchema.js";
 
@@ -12,7 +12,7 @@ router.route("/").get(isAuth, AuthController.getUser).all(methodNotAllowed);
 
 router
   .route("/signup")
-  .post(validateBody(userSchema), AuthController.register)
+  .post(validateBody(AuthSchema.user), AuthController.register)
   .all(methodNotAllowed);
 
 router

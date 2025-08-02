@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import { ApiError } from "./responseHandler";
 
-// Hash password
 export async function hashPassword(password: string): Promise<string> {
   if (!password) {
     throw ApiError.badRequest("Please provide a password");
@@ -13,17 +12,16 @@ export async function hashPassword(password: string): Promise<string> {
   return hashedPassword;
 }
 
-// Compares password
 export async function comparePassword(
-  incomingPassword: string,
+  typedPassword: string,
   existingPassword: string
 ): Promise<void> {
-  if (!incomingPassword || !existingPassword) {
-    throw ApiError.badRequest("Please provide a password");
+  if (!typedPassword || !existingPassword) {
+    throw ApiError.badRequest("Please provide required password");
   }
-  const isMatch = await Bun.password.verify(incomingPassword, existingPassword);
+  const isMatch = await Bun.password.verify(typedPassword, existingPassword);
   if (!isMatch) {
-    throw ApiError.unauthorized("Unauthorized");
+    throw ApiError.unauthorized("Invalid email or password");
   }
 }
 

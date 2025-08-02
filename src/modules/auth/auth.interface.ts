@@ -1,7 +1,9 @@
 export interface RegisterDTO {
+  firstName: string;
+  lastName: string;
+  role: "EMPLOYER" | "JOB_SEEKER";
   email: string;
   password: string;
-  firstName?: string;
   [key: string]: any;
 }
 
@@ -13,12 +15,16 @@ export interface LoginDTO {
 }
 
 export interface OTPData {
-  email: string;
   otp: string;
 }
 
-export interface ResetPasswordDTO {
+export interface forgotPasswordDTO {
   email: string;
-  otp: string;
+  [key: string]: any;
+}
+
+export interface ResetPasswordDTO {
+  token: string;
   password: string;
+  [key: string]: any;
 }

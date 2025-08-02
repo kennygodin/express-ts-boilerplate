@@ -2,11 +2,10 @@ import handlebars from "handlebars";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import OTP from "../modules/otp/otp.model.js";
-import generateOTP from "../utils/generateOTP.js";
 import transporter from "../lib/transporter.js";
 import type { SentMessageInfo, Transporter } from "nodemailer";
 import logger from "../utils/logger.js";
+import { env } from "bun";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,7 +46,7 @@ class MailService {
   }: EmailOptions): Promise<SentMessageInfo> {
     try {
       const mailOptions = {
-        from: from || "Admin@BCT.com",
+        from: from || "admin@smartgateai.com",
         to,
         subject,
         text,
@@ -67,21 +66,38 @@ class MailService {
 
   public async sendOTPViaEmail(
     email: string,
-    userName: string
+    firstName: string,
+    otpToken: string
   ): Promise<SentMessageInfo> {
-    await OTP.findOneAndDelete({ email });
-
-    const otp = generateOTP();
-    await OTP.create({ email, otp });
-
-    const subject = "OTP Request";
-    const date = new Date().toLocaleString();
-    const emailText = `Hello ${userName},\n\nYour OTP is: ${otp}`;
+    const subject = "Confirm your email";
+    const emailText = `Hello ${firstName},\n\nYour OTP is: ${otpToken}`;
 
     const html = MailService.loadTemplate("OTPTemplate", {
-      userName,
-      otp,
-      date,
+      firstName,
+      otpToken,
+      appName: env.APP_NAME,
+    });
+
+    return await this.sendEmail({
+      to: email,
+      subject,
+      text: emailText,
+      html,
+    });
+  }
+
+  public async sendPasswordResetEmail(
+    email: string,
+    firstName: string,
+    resetLink: string
+  ): Promise<SentMessageInfo> {
+    const subject = "Reset your password";
+    const emailText = `Hello ${firstName},\n\nClick this link to reset your password:\n${resetLink}\n\nThis link is valid for 60 minutes.`;
+
+    const html = MailService.loadTemplate("ResetPasswordTemplate", {
+      firstName,
+      resetLink,
+      appName: env.APP_NAME,
     });
 
     return await this.sendEmail({

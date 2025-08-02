@@ -25,12 +25,9 @@ export class AuthSchemas {
 
   static verifyOTP = z
     .object({
-      email: z
-        .string({ required_error: "Email is required" })
-        .email("Please provide a valid email address"),
       otp: z
         .string({ required_error: "otp is required" })
-        .min(4, "otp must be at least 5 characters long"),
+        .min(4, "otp must be at least 4 characters long"),
     })
     .strict();
 
@@ -52,12 +49,7 @@ export class AuthSchemas {
 
   static resetPassword = z
     .object({
-      email: z
-        .string({ required_error: "Email is required" })
-        .email("Please provide a valid email address"),
-      otp: z
-        .string({ required_error: "otp is required" })
-        .min(4, "otp must be at least 4 characters long"),
+      token: z.string({ required_error: "Token is required" }),
       password: z
         .string({ required_error: "Password is required" })
         .min(5, "Password must be at least 5 characters long"),
